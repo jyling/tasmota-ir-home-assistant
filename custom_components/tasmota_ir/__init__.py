@@ -17,7 +17,7 @@ from .store import CodeLibrary
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS: list[Platform] = [Platform.REMOTE]
+PLATFORMS: list[Platform] = [Platform.REMOTE, Platform.CLIMATE]
 
 CARD_URL_PATH = "/tasmota_ir/tasmota-ir-card.js"
 CARD_REGISTERED_KEY = "card_registered"

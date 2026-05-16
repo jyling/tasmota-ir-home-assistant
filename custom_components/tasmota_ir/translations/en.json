@@ -30,21 +30,32 @@
       "init": {
         "title": "Tasmota IR",
         "menu_options": {
-          "add_device": "Add a target device",
-          "remove_device": "Remove a target device"
+          "add_remote": "Add a TV-style device (learn buttons)",
+          "add_climate": "Add an AC (mode / temperature / fan)",
+          "remove_device": "Remove a device"
         }
       },
-      "add_device": {
-        "title": "Add target device",
-        "description": "A target device is the appliance you control (TV, AC, …). Each becomes a remote.* entity.",
+      "add_remote": {
+        "title": "Add TV-style device",
+        "description": "A TV-style device exposes a remote.* entity where each button is learned individually.",
         "data": {
           "name": "Friendly name",
           "manufacturer": "Manufacturer (optional)",
           "model": "Model (optional)"
         }
       },
+      "add_climate": {
+        "title": "Add AC",
+        "description": "An AC exposes a climate.* entity. Tasmota generates the correct IR signal from mode/temp/fan — no learning needed, but the AC vendor must be one Tasmota recognises.",
+        "data": {
+          "name": "Friendly name",
+          "vendor": "AC vendor / protocol",
+          "manufacturer": "Manufacturer (optional)",
+          "model": "Model (optional)"
+        }
+      },
       "remove_device": {
-        "title": "Remove target device",
+        "title": "Remove device",
         "data": {
           "device": "Device"
         }

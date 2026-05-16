@@ -14,6 +14,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.data_entry_flow import FlowResult
 
 from .const import (
+    COMMON_AC_VENDORS,
     DEFAULT_TOPIC_PREFIX,
     DISCOVERY_WAIT,
     DOMAIN,
@@ -134,25 +135,55 @@ class TasmotaIrOptionsFlow(OptionsFlow):
 
     async def async_step_init(self, user_input=None) -> FlowResult:
         return self.async_show_menu(
-            step_id="init", menu_options=["add_device", "remove_device"]
+            step_id="init",
+            menu_options=["add_remote", "add_climate", "remove_device"],
         )
 
-    async def async_step_add_device(self, user_input=None) -> FlowResult:
+    async def async_step_add_remote(self, user_input=None) -> FlowResult:
+        """Add a TV-style device (learn individual buttons)."""
         if user_input is not None:
             runtime = self.hass.data[DOMAIN][self.entry.entry_id]
             runtime.library.add_device(
                 name=user_input["name"],
                 manufacturer=user_input.get("manufacturer", ""),
                 model=user_input.get("model", ""),
+                device_type="remote",
             )
             await runtime.library.async_save()
             await self.hass.config_entries.async_reload(self.entry.entry_id)
             return self.async_create_entry(title="", data={})
         return self.async_show_form(
-            step_id="add_device",
+            step_id="add_remote",
             data_schema=vol.Schema(
                 {
                     vol.Required("name"): str,
+                    vol.Optional("manufacturer", default=""): str,
+                    vol.Optional("model", default=""): str,
+                }
+            ),
+        )
+
+    async def async_step_add_climate(self, user_input=None) -> FlowResult:
+        """Add an AC (stateful, uses Tasmota IRHvac with a fixed vendor)."""
+        if user_input is not None:
+            runtime = self.hass.data[DOMAIN][self.entry.entry_id]
+            runtime.library.add_device(
+                name=user_input["name"],
+                manufacturer=user_input.get("manufacturer", "")
+                or user_input.get("vendor", ""),
+                model=user_input.get("model", ""),
+                device_type="climate",
+                vendor=user_input["vendor"],
+            )
+            await runtime.library.async_save()
+            await self.hass.config_entries.async_reload(self.entry.entry_id)
+            return self.async_create_entry(title="", data={})
+        return self.async_show_form(
+            step_id="add_climate",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("name"): str,
+                    vol.Required("vendor"): vol.In(COMMON_AC_VENDORS),
                     vol.Optional("manufacturer", default=""): str,
                     vol.Optional("model", default=""): str,
                 }

@@ -69,3 +69,13 @@ class MqttIrBridge:
             qos=0,
             retain=False,
         )
+
+    async def async_send_hvac(self, payload: dict[str, Any]) -> None:
+        """Publish an IRHvac payload — stateful AC control."""
+        await mqtt.async_publish(
+            self.hass,
+            f"cmnd/{self.topic_prefix}/IRHvac",
+            json.dumps(payload),
+            qos=0,
+            retain=False,
+        )

@@ -26,7 +26,8 @@ async def async_setup_entry(
     runtime = hass.data[DOMAIN][entry.entry_id]
     entities = [
         TasmotaIrRemote(runtime, entry, device_id)
-        for device_id in runtime.library.devices
+        for device_id, info in runtime.library.devices.items()
+        if info.get("type", "remote") == "remote"
     ]
     async_add_entities(entities)
 

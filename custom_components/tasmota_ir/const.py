@@ -20,3 +20,32 @@ DEFAULT_LEARN_TIMEOUT = 20
 SIGNAL_DEVICE_ADDED = f"{DOMAIN}_device_added"
 SIGNAL_DEVICE_REMOVED = f"{DOMAIN}_device_removed"
 SIGNAL_COMMANDS_UPDATED = f"{DOMAIN}_commands_updated"
+
+# Tasmota IRHvac vendor list (most common subset; user can type any in manually).
+COMMON_AC_VENDORS = [
+    "DAIKIN",
+    "DAIKIN64",
+    "DAIKIN128",
+    "DAIKIN152",
+    "DAIKIN176",
+    "DAIKIN216",
+    "FUJITSU",
+    "GREE",
+    "HAIER",
+    "HITACHI1",
+    "KELVINATOR",
+    "LG",
+    "LG2",
+    "MIDEA",
+    "MITSUBISHI112",
+    "MITSUBISHI136",
+    "MITSUBISHIHEAVY152",
+    "PANASONIC",
+    "SAMSUNG",
+    "SANYO",
+    "SHARP",
+    "TCL112",
+    "TOSHIBA",
+    "TROTEC",
+    "WHIRLPOOL",
+]

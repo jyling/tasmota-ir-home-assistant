@@ -45,15 +45,41 @@ class CodeLibrary:
     def set_topic_prefix(self, prefix: str) -> None:
         self._data["topic_prefix"] = prefix
 
-    def add_device(self, *, name: str, manufacturer: str = "", model: str = "") -> str:
+    def add_device(
+        self,
+        *,
+        name: str,
+        manufacturer: str = "",
+        model: str = "",
+        device_type: str = "remote",
+        vendor: str = "",
+    ) -> str:
+        """Add a target device.
+
+        device_type:
+          - "remote": TV-style, learn individual buttons (commands dict).
+          - "climate": AC, stateful — uses Tasmota IRHvac with a fixed vendor.
+        """
         device_id = f"{_slug(name)}_{uuid.uuid4().hex[:4]}"
         self._data["devices"][device_id] = {
             "name": name,
             "manufacturer": manufacturer,
             "model": model,
+            "type": device_type,
+            "vendor": vendor,
             "commands": {},
+            "state": {} if device_type == "climate" else {},
         }
         return device_id
+
+    def device_type(self, device_id: str) -> str:
+        return self._data["devices"].get(device_id, {}).get("type", "remote")
+
+    def set_climate_state(self, device_id: str, state: dict) -> None:
+        self._data["devices"][device_id]["state"] = state
+
+    def get_climate_state(self, device_id: str) -> dict:
+        return self._data["devices"].get(device_id, {}).get("state", {})
 
     def remove_device(self, device_id: str) -> None:
         self._data["devices"].pop(device_id, None)
