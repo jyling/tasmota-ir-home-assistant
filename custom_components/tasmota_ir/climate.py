@@ -17,6 +17,24 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN
 
+# Reverse maps for parsing IRHVAC payloads back into HA state.
+TASMOTA_TO_HA_MODE = {
+    "Off": HVACMode.OFF,
+    "Auto": HVACMode.AUTO,
+    "Cool": HVACMode.COOL,
+    "Heat": HVACMode.HEAT,
+    "Dry": HVACMode.DRY,
+    "Fan": HVACMode.FAN_ONLY,
+}
+TASMOTA_TO_HA_FAN = {
+    "Auto": "auto",
+    "Min": "min",
+    "Low": "low",
+    "Med": "medium",
+    "High": "high",
+    "Max": "max",
+}
+
 _LOGGER = logging.getLogger(__name__)
 
 # HA HVACMode → Tasmota Mode string
@@ -106,6 +124,97 @@ class TasmotaIrClimate(ClimateEntity):
             self._last_active_mode = HVACMode(last_active)
         except ValueError:
             self._last_active_mode = HVACMode.COOL
+        self._unsub_hvac_listener = None
+
+    async def async_added_to_hass(self) -> None:
+        """Subscribe to physical-remote IR events so we can mirror state."""
+        await super().async_added_to_hass()
+        self._unsub_hvac_listener = self._runtime.bridge.register_hvac_listener(
+            self._on_physical_remote_hvac
+        )
+
+    async def async_will_remove_from_hass(self) -> None:
+        """Unsubscribe before removal."""
+        if self._unsub_hvac_listener:
+            self._unsub_hvac_listener()
+            self._unsub_hvac_listener = None
+        await super().async_will_remove_from_hass()
+
+    def _on_physical_remote_hvac(self, hvac: dict[str, Any]) -> None:
+        """A physical remote press was captured — mirror its state into HA.
+
+        This keeps HA's view of the AC consistent with reality even when
+        someone uses the actual remote. Without this, Tasmota's stored
+        state can drift and subsequent HA commands toggle the AC unexpectedly.
+        """
+        # Filter to the matching vendor — multiple AC entities or noisy
+        # captures shouldn't cross-pollinate.
+        vendor = hvac.get("Vendor")
+        if vendor and self._vendor and vendor != self._vendor:
+            return
+
+        power = hvac.get("Power")
+        mode_str = hvac.get("Mode")
+        ha_mode = TASMOTA_TO_HA_MODE.get(mode_str) if mode_str else None
+
+        changed = False
+
+        if power == "Off":
+            if self._attr_hvac_mode != HVACMode.OFF:
+                if self._attr_hvac_mode != HVACMode.OFF:
+                    self._last_active_mode = self._attr_hvac_mode
+                self._attr_hvac_mode = HVACMode.OFF
+                changed = True
+        elif power == "On" and ha_mode is not None and ha_mode != HVACMode.OFF:
+            if self._attr_hvac_mode != ha_mode:
+                self._attr_hvac_mode = ha_mode
+                self._last_active_mode = ha_mode
+                changed = True
+
+        temp = hvac.get("Temp")
+        if isinstance(temp, (int, float)) and temp != self._attr_target_temperature:
+            self._attr_target_temperature = float(temp)
+            changed = True
+
+        fan_str = hvac.get("FanSpeed")
+        ha_fan = TASMOTA_TO_HA_FAN.get(fan_str) if fan_str else None
+        if ha_fan and ha_fan != self._attr_fan_mode:
+            self._attr_fan_mode = ha_fan
+            changed = True
+
+        swing_v = hvac.get("SwingV", "Off")
+        swing_h = hvac.get("SwingH", "Off")
+        v_on = swing_v not in ("Off", None, "")
+        h_on = swing_h not in ("Off", None, "")
+        if v_on and h_on:
+            new_swing = "both"
+        elif v_on:
+            new_swing = "vertical"
+        elif h_on:
+            new_swing = "horizontal"
+        else:
+            new_swing = "off"
+        if new_swing != self._attr_swing_mode:
+            self._attr_swing_mode = new_swing
+            changed = True
+
+        if changed:
+            self._runtime.library.set_climate_state(
+                self._device_id,
+                {
+                    "hvac_mode": self._attr_hvac_mode.value
+                    if hasattr(self._attr_hvac_mode, "value")
+                    else str(self._attr_hvac_mode),
+                    "target_temperature": self._attr_target_temperature,
+                    "fan_mode": self._attr_fan_mode,
+                    "swing_mode": self._attr_swing_mode,
+                    "last_active_mode": self._last_active_mode.value
+                    if hasattr(self._last_active_mode, "value")
+                    else str(self._last_active_mode),
+                },
+            )
+            self.hass.async_create_task(self._runtime.library.async_save())
+            self.async_write_ha_state()
 
     async def _async_publish(self) -> None:
         """Compose an IRHvac payload from current entity state and publish it.

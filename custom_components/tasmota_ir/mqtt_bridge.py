@@ -21,6 +21,22 @@ class MqttIrBridge:
         self._unsub = None
         self._learn_lock = asyncio.Lock()
         self._pending: asyncio.Future[dict[str, Any]] | None = None
+        # Listeners notified when a captured IR signal includes an IRHVAC
+        # parsed object. Used by climate entities to mirror the physical
+        # remote's state into HA.
+        self._hvac_listeners: list = []
+
+    def register_hvac_listener(self, callback) -> callable:
+        """Subscribe to IRHVAC events. Returns an unsubscribe function."""
+        self._hvac_listeners.append(callback)
+
+        def _unsub() -> None:
+            try:
+                self._hvac_listeners.remove(callback)
+            except ValueError:
+                pass
+
+        return _unsub
 
     async def async_start(self) -> None:
         self._unsub = await mqtt.async_subscribe(
@@ -49,6 +65,16 @@ class MqttIrBridge:
         ir = data.get("IrReceived")
         if not ir:
             return
+        # Route IRHVAC payloads to climate listeners so they can mirror
+        # the physical remote's state into HA.
+        hvac = ir.get("IRHVAC") if isinstance(ir, dict) else None
+        if hvac and isinstance(hvac, dict):
+            for cb in list(self._hvac_listeners):
+                try:
+                    cb(hvac)
+                except Exception as err:  # noqa: BLE001
+                    _LOGGER.warning("IRHVAC listener error: %s", err)
+        # Resolve a pending learn_command (one-shot).
         if self._pending and not self._pending.done():
             self._pending.set_result(ir)
 
