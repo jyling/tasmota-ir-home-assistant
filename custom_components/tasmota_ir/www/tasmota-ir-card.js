@@ -91,6 +91,43 @@ const STYLE = `
     padding: 16px 0;
     text-align: center;
   }
+  .menu-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+  }
+  .menu {
+    background: var(--card-background-color, #1c1c1e);
+    border-radius: 14px;
+    padding: 8px;
+    min-width: 220px;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  }
+  .menu .menu-title {
+    padding: 10px 14px 6px;
+    color: var(--secondary-text-color, #a0a0a0);
+    font-size: 0.85rem;
+    text-transform: capitalize;
+  }
+  .menu button {
+    appearance: none;
+    border: none;
+    background: transparent;
+    color: var(--primary-text-color, #fff);
+    padding: 12px 14px;
+    width: 100%;
+    text-align: left;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    cursor: pointer;
+  }
+  .menu button:hover { background: var(--secondary-background-color, #2c2c2e); }
+  .menu button.danger { color: #ff5d5d; }
+  .menu button.cancel { color: var(--secondary-text-color, #a0a0a0); }
 `;
 
 function prettify(name) {
@@ -165,6 +202,50 @@ class TasmotaIrCard extends HTMLElement {
     }
   }
 
+  async _relearn(cmd) {
+    if (this._learning) return;
+    this._learning = true;
+    this._learningName = cmd;
+    this._render();
+    try {
+      await this._hass.callService("remote", "learn_command", {
+        entity_id: this._config.entity,
+        command: [cmd],
+        timeout: this._config.learn_timeout,
+      });
+    } catch (err) {
+      alert(`Re-learn failed: ${err.message || err}`);
+    } finally {
+      this._learning = false;
+      this._learningName = null;
+      this._render();
+    }
+  }
+
+  async _delete(cmd) {
+    if (!confirm(`Delete button "${cmd}"? This can't be undone.`)) return;
+    try {
+      await this._hass.callService("remote", "delete_command", {
+        entity_id: this._config.entity,
+        command: [cmd],
+      });
+    } catch (err) {
+      alert(`Delete failed: ${err.message || err}`);
+    }
+  }
+
+  _openMenu(cmd) {
+    if (this._menuOpen) return;
+    this._menuOpen = cmd;
+    this._render();
+  }
+
+  _closeMenu() {
+    if (!this._menuOpen) return;
+    this._menuOpen = null;
+    this._render();
+  }
+
   async _learn() {
     if (this._learning) return;
     const name = window.prompt(
@@ -208,6 +289,12 @@ class TasmotaIrCard extends HTMLElement {
     const subtitle = this._subtitle();
     const cols = this._config.columns || 3;
 
+    const learnLabel = this._learning
+      ? (this._learningName
+          ? `Press your remote for "${prettify(this._learningName)}"…`
+          : "Press your remote at the IR receiver…")
+      : "+ Learn New Button";
+
     this.shadowRoot.innerHTML = `
       <style>${STYLE}</style>
       <ha-card style="--ti-cols: ${cols};">
@@ -218,18 +305,84 @@ class TasmotaIrCard extends HTMLElement {
         ${cmds.length === 0 ? `<div class="empty">No buttons yet — tap "+ Learn New Button" below.</div>` : ""}
         <div class="grid">
           ${cmds.map(c => `<button class="tile" data-cmd="${escapeAttr(c)}">${escapeHtml(prettify(c))}</button>`).join("")}
-          <button class="learn ${this._learning ? "busy" : ""}">
-            ${this._learning ? "Press your remote at the IR receiver…" : "+ Learn New Button"}
-          </button>
+          <button class="learn ${this._learning ? "busy" : ""}">${escapeHtml(learnLabel)}</button>
         </div>
       </ha-card>
+      ${this._menuOpen ? this._renderMenu(this._menuOpen) : ""}
     `;
 
+    // Wire tile interactions: short tap → send, long-press / right-click → menu.
     this.shadowRoot.querySelectorAll("button.tile").forEach(b => {
-      b.addEventListener("click", () => this._send(b.dataset.cmd));
+      const cmd = b.dataset.cmd;
+      let timer = null;
+      let longPressed = false;
+
+      const startPress = () => {
+        longPressed = false;
+        timer = window.setTimeout(() => {
+          longPressed = true;
+          this._openMenu(cmd);
+        }, 500);
+      };
+      const endPress = () => {
+        if (timer) window.clearTimeout(timer);
+        timer = null;
+      };
+
+      b.addEventListener("pointerdown", startPress);
+      b.addEventListener("pointerup", endPress);
+      b.addEventListener("pointerleave", endPress);
+      b.addEventListener("pointercancel", endPress);
+      b.addEventListener("contextmenu", (ev) => {
+        ev.preventDefault();
+        this._openMenu(cmd);
+      });
+      b.addEventListener("click", (ev) => {
+        if (longPressed) {
+          ev.preventDefault();
+          longPressed = false;
+          return;
+        }
+        this._send(cmd);
+      });
     });
+
     const learnBtn = this.shadowRoot.querySelector("button.learn");
     if (learnBtn) learnBtn.addEventListener("click", () => this._learn());
+
+    // Wire menu (if open).
+    if (this._menuOpen) {
+      const overlay = this.shadowRoot.querySelector(".menu-overlay");
+      if (overlay) {
+        overlay.addEventListener("click", (ev) => {
+          if (ev.target === overlay) this._closeMenu();
+        });
+      }
+      const cmd = this._menuOpen;
+      this.shadowRoot.querySelectorAll("[data-action]").forEach(el => {
+        el.addEventListener("click", () => {
+          const action = el.dataset.action;
+          this._closeMenu();
+          if (action === "send") this._send(cmd);
+          else if (action === "relearn") this._relearn(cmd);
+          else if (action === "delete") this._delete(cmd);
+        });
+      });
+    }
+  }
+
+  _renderMenu(cmd) {
+    return `
+      <div class="menu-overlay">
+        <div class="menu">
+          <div class="menu-title">${escapeHtml(prettify(cmd))}</div>
+          <button data-action="send">▶ Send</button>
+          <button data-action="relearn">↻ Re-learn (overwrite)</button>
+          <button data-action="delete" class="danger">🗑 Delete</button>
+          <button data-action="cancel" class="cancel">Cancel</button>
+        </div>
+      </div>
+    `;
   }
 }
 
