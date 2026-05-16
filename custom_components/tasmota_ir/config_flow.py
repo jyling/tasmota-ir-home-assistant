@@ -134,7 +134,7 @@ class TasmotaIrOptionsFlow(OptionsFlow):
 
     async def async_step_init(self, user_input=None) -> FlowResult:
         return self.async_show_menu(
-            step_id="menu", menu_options=["add_device", "remove_device"]
+            step_id="init", menu_options=["add_device", "remove_device"]
         )
 
     async def async_step_add_device(self, user_input=None) -> FlowResult:

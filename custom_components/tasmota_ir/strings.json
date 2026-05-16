@@ -27,7 +27,7 @@
   },
   "options": {
     "step": {
-      "menu": {
+      "init": {
         "title": "Tasmota IR",
         "menu_options": {
           "add_device": "Add a target device",
