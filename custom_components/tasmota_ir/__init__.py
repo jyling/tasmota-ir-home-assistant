@@ -10,6 +10,7 @@ from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.device_registry import DeviceEntry
 
 from .const import DOMAIN
@@ -77,6 +78,22 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await bridge.async_start()
 
     hass.data[DOMAIN][entry.entry_id] = TasmotaIrRuntime(library=library, bridge=bridge)
+
+    # Clean up any orphaned HA device-registry entries — devices that were
+    # removed from our library (or never re-added after a wipe) but whose
+    # device entries linger. Without this they show up greyed-out in the
+    # integration page and break "Remove a device" expectations.
+    device_reg = dr.async_get(hass)
+    known_ids = set(library.devices.keys())
+    for device in list(device_reg.devices.values()):
+        if entry.entry_id not in device.config_entries:
+            continue
+        for d_domain, d_id in device.identifiers:
+            if d_domain != DOMAIN:
+                continue
+            if d_id not in known_ids:
+                device_reg.async_remove_device(device.id)
+            break
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
