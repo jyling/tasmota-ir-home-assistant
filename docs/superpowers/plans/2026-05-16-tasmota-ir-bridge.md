@@ -231,26 +231,17 @@
 
 ---
 
-## Task 6: Create device-group labels
+## Task 6: Device-group labels (deferred — created inline during Task 7)
 
-**Files:** none (HA UI).
+**Files:** none.
 
-- [ ] **Step 6.1: Open Labels**
+Labels are created on-the-fly from the label picker on each script's edit page (Task 7). There's no need to pre-create them here — when you're saving a script and click the labels field, just type a new name (e.g. `TV`) and press Enter; HA creates the label and assigns it in one action. Subsequent scripts can pick the same label from the dropdown.
 
-  Settings → **Labels**.
+- [ ] **Step 6.1: Decide on your device categories**
 
-- [ ] **Step 6.2: Create initial labels**
+  No clicks — just decide what groups you want (e.g. `TV`, `AC`, `Receiver`, `Soundbar`). You can add more any time.
 
-  Click **+ Add Label** and create one per device you plan to learn codes for. Suggested starting set:
-  - `TV` (id: `tv`)
-  - `AC` (id: `ac`)
-  - `Receiver` (id: `receiver`)
-
-  More can be added any time.
-
-- [ ] **Step 6.3: Verify**
-
-  Settings → Labels list shows the labels with their auto-generated IDs (lowercased). Note the **label ID** strings — you'll use them in the dashboard cards.
+If you ever need to rename or delete a label across many scripts at once, **Settings → Labels** provides that bulk-management UI. For initial setup, skip it.
 
 ---
 
@@ -282,7 +273,7 @@ This task is the end-to-end smoke test for the whole bridge.
   - Name: `TV Power`
   - `IR payload (JSON)`: paste the JSON from step 7.3.
   - `MQTT command topic`: leave default `cmnd/tasmota_ir/IRSend`.
-  - Click the **labels** icon on this script's edit page → assign label `TV`.
+  - Click the **labels** field on this script's edit page → **type `TV` and press Enter** (creates the label and assigns it in one action). For your second TV button later, the `TV` label will already exist in the dropdown — just pick it.
   - Save.
 
 - [ ] **Step 7.5: Test the new script**
