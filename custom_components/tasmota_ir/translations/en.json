@@ -1,0 +1,57 @@
+{
+  "config": {
+    "step": {
+      "manual": {
+        "title": "Tasmota IR",
+        "description": "No Tasmota IR devices were auto-discovered. Enter the MQTT topic prefix manually.",
+        "data": {
+          "topic_prefix": "Topic prefix"
+        }
+      },
+      "pick": {
+        "title": "Tasmota IR",
+        "description": "Choose the Tasmota IR device to add.",
+        "data": {
+          "topic_prefix": "Device"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Could not connect to the MQTT broker.",
+      "mqtt_not_configured": "Configure the MQTT integration first."
+    },
+    "abort": {
+      "already_configured": "This Tasmota IR device is already configured.",
+      "mqtt_not_configured": "Configure the MQTT integration first."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Tasmota IR",
+        "menu_options": {
+          "add_device": "Add a target device",
+          "remove_device": "Remove a target device"
+        }
+      },
+      "add_device": {
+        "title": "Add target device",
+        "description": "A target device is the appliance you control (TV, AC, …). Each becomes a remote.* entity.",
+        "data": {
+          "name": "Friendly name",
+          "manufacturer": "Manufacturer (optional)",
+          "model": "Model (optional)"
+        }
+      },
+      "remove_device": {
+        "title": "Remove target device",
+        "data": {
+          "device": "Device"
+        }
+      }
+    },
+    "abort": {
+      "no_devices": "No devices to remove."
+    }
+  }
+}
