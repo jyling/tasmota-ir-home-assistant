@@ -10,6 +10,7 @@ from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.device_registry import DeviceEntry
 
 from .const import DOMAIN
 from .mqtt_bridge import MqttIrBridge
@@ -88,3 +89,36 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         runtime: TasmotaIrRuntime = hass.data[DOMAIN].pop(entry.entry_id)
         await runtime.bridge.async_stop()
     return unload_ok
+
+
+async def async_remove_config_entry_device(
+    hass: HomeAssistant,
+    config_entry: ConfigEntry,
+    device_entry: DeviceEntry,
+) -> bool:
+    """Allow removing an IR target device from the HA device page.
+
+    HA only shows a Delete button on the device page when the integration
+    explicitly opts in by implementing this hook. We find the device in
+    the library, remove it, save, and reload the entry so HA drops the
+    matching entity from the registry.
+    """
+    runtime: TasmotaIrRuntime | None = hass.data.get(DOMAIN, {}).get(
+        config_entry.entry_id
+    )
+    if runtime is None:
+        return True
+
+    removed = False
+    for domain, identifier in device_entry.identifiers:
+        if domain == DOMAIN and identifier in runtime.library.devices:
+            runtime.library.remove_device(identifier)
+            removed = True
+
+    if removed:
+        await runtime.library.async_save()
+        hass.async_create_task(
+            hass.config_entries.async_reload(config_entry.entry_id)
+        )
+
+    return True
