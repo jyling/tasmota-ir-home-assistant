@@ -127,6 +127,11 @@ class TasmotaIrClimate(ClimateEntity):
         swing = self._attr_swing_mode or "off"
         payload: dict[str, Any] = {
             "Vendor": self._vendor,
+            # StateMode=SendStore makes Tasmota track its own copy of the
+            # remote's state for differential protocols (Daikin64 et al.),
+            # so it only emits the IR delta — Power=On stops behaving as
+            # a toggle on every redundant call.
+            "StateMode": "SendStore",
             "Power": power,
             "Mode": mode,
             "FanSpeed": HA_TO_TASMOTA_FAN.get(self._attr_fan_mode or "auto", "Auto"),
