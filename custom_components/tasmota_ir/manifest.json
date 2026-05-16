@@ -1,13 +1,13 @@
 {
   "domain": "tasmota_ir",
   "name": "Tasmota IR",
-  "codeowners": ["@samuelling977"],
+  "codeowners": ["@jyling"],
   "config_flow": true,
   "dependencies": ["mqtt"],
-  "documentation": "https://github.com/samuelling977/tasmota-ir",
+  "documentation": "https://github.com/jyling/tasmota-ir-home-assistant",
   "integration_type": "hub",
   "iot_class": "local_push",
-  "issue_tracker": "https://github.com/samuelling977/tasmota-ir/issues",
+  "issue_tracker": "https://github.com/jyling/tasmota-ir-home-assistant/issues",
   "requirements": [],
   "version": "0.1.0"
 }
