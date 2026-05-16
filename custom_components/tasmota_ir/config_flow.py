@@ -136,8 +136,103 @@ class TasmotaIrOptionsFlow(OptionsFlow):
     async def async_step_init(self, user_input=None) -> FlowResult:
         return self.async_show_menu(
             step_id="init",
-            menu_options=["add_remote", "add_climate", "remove_device"],
+            menu_options=[
+                "add_remote",
+                "add_climate_auto",
+                "add_climate",
+                "remove_device",
+            ],
         )
+
+    async def async_step_add_climate_auto(self, user_input=None) -> FlowResult:
+        """Add an AC by listening to a button press on the physical remote.
+
+        Captures the Tasmota IRHVAC payload, uses its Vendor as the protocol,
+        and seeds the climate entity's initial state from the captured fields.
+        """
+        if user_input is None:
+            return self.async_show_form(
+                step_id="add_climate_auto",
+                data_schema=vol.Schema({vol.Required("name"): str}),
+            )
+
+        runtime = self.hass.data[DOMAIN][self.entry.entry_id]
+        try:
+            ir = await runtime.bridge.async_wait_for_ir(timeout=20)
+        except (asyncio.TimeoutError, TimeoutError):
+            return self.async_show_form(
+                step_id="add_climate_auto",
+                data_schema=vol.Schema(
+                    {vol.Required("name", default=user_input["name"]): str}
+                ),
+                errors={"base": "no_signal"},
+            )
+
+        hvac = ir.get("IRHVAC") if isinstance(ir, dict) else None
+        vendor = (hvac or {}).get("Vendor") or ir.get("Protocol")
+        if not vendor or not hvac:
+            return self.async_show_form(
+                step_id="add_climate_auto",
+                data_schema=vol.Schema(
+                    {vol.Required("name", default=user_input["name"]): str}
+                ),
+                errors={"base": "not_an_ac"},
+            )
+
+        device_id = runtime.library.add_device(
+            name=user_input["name"],
+            manufacturer=vendor,
+            device_type="climate",
+            vendor=vendor,
+        )
+
+        # Seed initial state from the captured payload so the new entity
+        # starts in sync with the AC's actual state.
+        from homeassistant.components.climate import HVACMode
+
+        mode_map = {
+            "Off": "off",
+            "Auto": "auto",
+            "Cool": "cool",
+            "Heat": "heat",
+            "Dry": "dry",
+            "Fan": "fan_only",
+        }
+        fan_map = {
+            "Auto": "auto",
+            "Min": "min",
+            "Low": "low",
+            "Med": "medium",
+            "High": "high",
+            "Max": "max",
+        }
+
+        captured_mode = mode_map.get(hvac.get("Mode", "Cool"), "cool")
+        hvac_mode = "off" if hvac.get("Power") == "Off" else captured_mode
+        last_active = captured_mode if captured_mode != "off" else "cool"
+
+        sv = hvac.get("SwingV", "Off") not in ("Off", None, "")
+        sh = hvac.get("SwingH", "Off") not in ("Off", None, "")
+        swing = (
+            "both" if sv and sh
+            else "vertical" if sv
+            else "horizontal" if sh
+            else "off"
+        )
+
+        runtime.library.set_climate_state(
+            device_id,
+            {
+                "hvac_mode": hvac_mode,
+                "target_temperature": float(hvac.get("Temp") or 24),
+                "fan_mode": fan_map.get(hvac.get("FanSpeed", "Auto"), "auto"),
+                "swing_mode": swing,
+                "last_active_mode": last_active,
+            },
+        )
+        await runtime.library.async_save()
+        await self.hass.config_entries.async_reload(self.entry.entry_id)
+        return self.async_create_entry(title="", data={})
 
     async def async_step_add_remote(self, user_input=None) -> FlowResult:
         """Add a TV-style device (learn individual buttons)."""

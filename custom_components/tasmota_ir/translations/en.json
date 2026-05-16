@@ -31,8 +31,16 @@
         "title": "Tasmota IR",
         "menu_options": {
           "add_remote": "Add a TV-style device (learn buttons)",
-          "add_climate": "Add an AC (mode / temperature / fan)",
+          "add_climate_auto": "Add an AC (auto-detect from remote)",
+          "add_climate": "Add an AC (pick vendor manually)",
           "remove_device": "Remove a device"
+        }
+      },
+      "add_climate_auto": {
+        "title": "Add AC (auto-detect)",
+        "description": "Enter a friendly name and click Submit. Then within 20 seconds, point your AC's physical remote at the Tasmota receiver and press any button. The vendor (Daikin64, Mitsubishi, etc.) and the AC's current state are read straight from the captured IR signal.",
+        "data": {
+          "name": "Friendly name"
         }
       },
       "add_remote": {
@@ -63,6 +71,10 @@
     },
     "abort": {
       "no_devices": "No devices to remove."
+    },
+    "error": {
+      "no_signal": "No IR signal received within 20 seconds. Try again, closer to the receiver.",
+      "not_an_ac": "Got an IR signal, but it didn't look like an AC remote (no IRHVAC payload). Try a different button on the AC remote, or use \"Add an AC (pick vendor manually)\"."
     }
   }
 }
