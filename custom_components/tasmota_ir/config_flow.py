@@ -9,13 +9,9 @@ from typing import Any
 import voluptuous as vol
 
 from homeassistant.components import mqtt
-from homeassistant.config_entries import (
-    ConfigEntry,
-    ConfigFlow,
-    ConfigFlowResult,
-    OptionsFlow,
-)
+from homeassistant.config_entries import ConfigEntry, ConfigFlow, OptionsFlow
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.data_entry_flow import FlowResult
 
 from .const import (
     DEFAULT_TOPIC_PREFIX,
@@ -25,6 +21,11 @@ from .const import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _mqtt_available(hass: HomeAssistant) -> bool:
+    """Return True if the MQTT integration has at least one config entry."""
+    return bool(hass.config_entries.async_entries("mqtt"))
 
 
 async def discover_tasmota_ir(hass: HomeAssistant) -> list[dict[str, str]]:
@@ -43,18 +44,22 @@ async def discover_tasmota_ir(hass: HomeAssistant) -> list[dict[str, str]]:
         if not topic:
             return
         name = cfg.get("dn") or topic
-        # Heuristic: a Tasmota-IR device's name or topic typically contains "IR".
-        # Stricter detection would parse the GPIO list ('gpio'/'g' fields) for
-        # IRsend / IRrecv components, but the heuristic catches the common case.
         haystack = f"{topic} {name} {json.dumps(cfg.get('g', ''))}".lower()
         if "ir" in haystack:
             found[topic] = {"topic": topic, "name": name}
 
-    unsub = await mqtt.async_subscribe(hass, TASMOTA_DISCOVERY_TOPIC, _on_msg, qos=0)
+    try:
+        unsub = await mqtt.async_subscribe(hass, TASMOTA_DISCOVERY_TOPIC, _on_msg, qos=0)
+    except Exception as err:  # noqa: BLE001
+        _LOGGER.warning("Tasmota discovery subscribe failed: %s", err)
+        return []
     try:
         await asyncio.sleep(DISCOVERY_WAIT)
     finally:
-        unsub()
+        try:
+            unsub()
+        except Exception:  # noqa: BLE001
+            pass
     return list(found.values())
 
 
@@ -68,11 +73,16 @@ class TasmotaIrConfigFlow(ConfigFlow, domain=DOMAIN):
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        if not mqtt.config_entry_enabled(self.hass):
+    ) -> FlowResult:
+        if not _mqtt_available(self.hass):
             return self.async_abort(reason="mqtt_not_configured")
 
-        self._candidates = await discover_tasmota_ir(self.hass)
+        try:
+            self._candidates = await discover_tasmota_ir(self.hass)
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.exception("Tasmota IR discovery failed: %s", err)
+            self._candidates = []
+
         if len(self._candidates) == 1:
             return await self._create(self._candidates[0]["topic"])
         if not self._candidates:
@@ -81,7 +91,7 @@ class TasmotaIrConfigFlow(ConfigFlow, domain=DOMAIN):
 
     async def async_step_pick(
         self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
+    ) -> FlowResult:
         if user_input is not None:
             return await self._create(user_input["topic_prefix"])
         options = {c["topic"]: c["name"] for c in self._candidates}
@@ -92,7 +102,7 @@ class TasmotaIrConfigFlow(ConfigFlow, domain=DOMAIN):
 
     async def async_step_manual(
         self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
+    ) -> FlowResult:
         if user_input is not None:
             return await self._create(user_input["topic_prefix"])
         return self.async_show_form(
@@ -102,7 +112,7 @@ class TasmotaIrConfigFlow(ConfigFlow, domain=DOMAIN):
             ),
         )
 
-    async def _create(self, topic_prefix: str) -> ConfigFlowResult:
+    async def _create(self, topic_prefix: str) -> FlowResult:
         await self.async_set_unique_id(f"{DOMAIN}_{topic_prefix}")
         self._abort_if_unique_id_configured()
         return self.async_create_entry(
@@ -122,12 +132,12 @@ class TasmotaIrOptionsFlow(OptionsFlow):
     def __init__(self, entry: ConfigEntry) -> None:
         self.entry = entry
 
-    async def async_step_init(self, user_input=None) -> ConfigFlowResult:
+    async def async_step_init(self, user_input=None) -> FlowResult:
         return self.async_show_menu(
             step_id="menu", menu_options=["add_device", "remove_device"]
         )
 
-    async def async_step_add_device(self, user_input=None) -> ConfigFlowResult:
+    async def async_step_add_device(self, user_input=None) -> FlowResult:
         if user_input is not None:
             runtime = self.hass.data[DOMAIN][self.entry.entry_id]
             runtime.library.add_device(
@@ -149,7 +159,7 @@ class TasmotaIrOptionsFlow(OptionsFlow):
             ),
         )
 
-    async def async_step_remove_device(self, user_input=None) -> ConfigFlowResult:
+    async def async_step_remove_device(self, user_input=None) -> FlowResult:
         runtime = self.hass.data[DOMAIN][self.entry.entry_id]
         choices = {d_id: d["name"] for d_id, d in runtime.library.devices.items()}
         if not choices:
