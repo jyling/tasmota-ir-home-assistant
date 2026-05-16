@@ -97,11 +97,33 @@ class TasmotaIrClimate(ClimateEntity):
         self._attr_target_temperature = state.get("target_temperature", 24)
         self._attr_fan_mode = state.get("fan_mode", "auto")
         self._attr_swing_mode = state.get("swing_mode", "off")
+        # The last *active* (non-off) HVAC mode. Some AC protocols (Daikin64,
+        # Mitsubishi, Toshiba, …) need the active mode preserved in the IR
+        # payload when Power=Off — sending Mode=Off causes the AC to treat
+        # the signal as a power-toggle instead of a state-sync.
+        last_active = state.get("last_active_mode", HVACMode.COOL.value)
+        try:
+            self._last_active_mode = HVACMode(last_active)
+        except ValueError:
+            self._last_active_mode = HVACMode.COOL
 
     async def _async_publish(self) -> None:
-        """Compose an IRHvac payload from current entity state and publish it."""
-        power = "Off" if self._attr_hvac_mode == HVACMode.OFF else "On"
-        mode = HA_TO_TASMOTA_MODE.get(self._attr_hvac_mode, "Auto")
+        """Compose an IRHvac payload from current entity state and publish it.
+
+        Power vs Mode: many AC protocols want a real cooling/heating mode
+        always present in the payload, with Power toggled to On/Off. Sending
+        Mode=Off is treated by some AC firmwares as a separate command and
+        triggers a power-toggle. We track the last *active* mode and
+        re-use it whenever HA says "off".
+        """
+        is_off = self._attr_hvac_mode == HVACMode.OFF
+        if not is_off:
+            self._last_active_mode = self._attr_hvac_mode
+        mode_for_payload = (
+            self._last_active_mode if is_off else self._attr_hvac_mode
+        )
+        power = "Off" if is_off else "On"
+        mode = HA_TO_TASMOTA_MODE.get(mode_for_payload, "Cool")
         swing = self._attr_swing_mode or "off"
         payload: dict[str, Any] = {
             "Vendor": self._vendor,
@@ -123,6 +145,9 @@ class TasmotaIrClimate(ClimateEntity):
                 "target_temperature": self._attr_target_temperature,
                 "fan_mode": self._attr_fan_mode,
                 "swing_mode": self._attr_swing_mode,
+                "last_active_mode": self._last_active_mode.value
+                if hasattr(self._last_active_mode, "value")
+                else str(self._last_active_mode),
             },
         )
         await self._runtime.library.async_save()
